@@ -171,32 +171,43 @@ namespace Barotrauma.Networking
         {
             if (RespawnShuttle != null)
             {
-                CurrentState = State.Transporting;
-                GameMain.Server.CreateEntityEvent(this);
-
-                ResetShuttle();
-
-                if (shuttleSteering != null)
+                if (WayPoint.IsCloneSpawnExist(Submarine.MainSub))
                 {
-                    shuttleSteering.TargetVelocity = Vector2.Zero;
-                }
+                    CurrentState = State.Waiting;
+                    GameServer.Log("Respawning everyone in clonning cuves of the main sub.", ServerLog.MessageType.Spawning);
+                    GameMain.Server.CreateEntityEvent(this);
 
-                GameServer.Log("Dispatching the respawn shuttle.", ServerLog.MessageType.Spawning);
-
-                Vector2 spawnPos = FindSpawnPos();
-                RespawnCharacters(spawnPos);
-
-                CoroutineManager.StopCoroutines("forcepos");
-                if (spawnPos.Y > Level.Loaded.Size.Y)
+                    Vector2 spawnPos = Submarine.MainSub.Position;
+                    RespawnCharacters(spawnPos);
+                } else
                 {
-                    CoroutineManager.StartCoroutine(ForceShuttleToPos(Level.Loaded.StartPosition - Vector2.UnitY * Level.ShaftHeight, 100.0f), "forcepos");
-                }
-                else
-                {
-                    RespawnShuttle.SetPosition(spawnPos);
-                    RespawnShuttle.Velocity = Vector2.Zero;
-                    RespawnShuttle.NeutralizeBallast();
-                    RespawnShuttle.EnableMaintainPosition();
+                    CurrentState = State.Transporting;
+                    GameMain.Server.CreateEntityEvent(this);
+
+                    ResetShuttle();
+
+                    if (shuttleSteering != null)
+                    {
+                        shuttleSteering.TargetVelocity = Vector2.Zero;
+                    }
+
+                    GameServer.Log("Dispatching the respawn shuttle.", ServerLog.MessageType.Spawning);
+
+                    Vector2 spawnPos = FindSpawnPos();
+                    RespawnCharacters(spawnPos);
+
+                    CoroutineManager.StopCoroutines("forcepos");
+                    if (spawnPos.Y > Level.Loaded.Size.Y)
+                    {
+                        CoroutineManager.StartCoroutine(ForceShuttleToPos(Level.Loaded.StartPosition - Vector2.UnitY * Level.ShaftHeight, 100.0f), "forcepos");
+                    }
+                    else
+                    {
+                        RespawnShuttle.SetPosition(spawnPos);
+                        RespawnShuttle.Velocity = Vector2.Zero;
+                        RespawnShuttle.NeutralizeBallast();
+                        RespawnShuttle.EnableMaintainPosition();
+                    }
                 }
             }
             else
@@ -314,7 +325,12 @@ namespace Barotrauma.Networking
         {
             respawnedCharacters.Clear();
 
-            var respawnSub = RespawnShuttle ?? Submarine.MainSub;
+            Submarine cloningSub = null;
+            if (WayPoint.IsCloneSpawnExist(Submarine.MainSub))
+            {
+                cloningSub = Submarine.MainSub;
+            }
+            var respawnSub = cloningSub ?? RespawnShuttle ?? Submarine.MainSub;
 
             MultiPlayerCampaign campaign = GameMain.GameSession.GameMode as MultiPlayerCampaign;
 
@@ -360,6 +376,7 @@ namespace Barotrauma.Networking
             //the spawnpoints where they would spawn if they were spawned inside the main sub
             //(in order to give them appropriate ID card tags)
             var mainSubSpawnPoints = WayPoint.SelectCrewSpawnPoints(characterInfos, Submarine.MainSub);
+            var clonningSpawnPoints = WayPoint.SelectCloneSpawnPoints(characterInfos, Submarine.MainSub);
 
             ItemPrefab divingSuitPrefab = null;
             if ((shuttlePos != null && Level.Loaded.GetRealWorldDepth(shuttlePos.Value.Y) > Level.DefaultRealWorldCrushDepth) ||
@@ -403,7 +420,8 @@ namespace Barotrauma.Networking
                     }
                 }
 
-                var character = Character.Create(characterInfos[i], (forceSpawnInMainSub ? mainSubSpawnPoints[i] : shuttleSpawnPoints[i]).WorldPosition, characterInfos[i].Name, isRemotePlayer: !bot, hasAi: bot);
+                bool cloningSpawn = RespawnShuttle != null && WayPoint.IsCloneSpawnExist(Submarine.MainSub);
+                var character = Character.Create(characterInfos[i], (forceSpawnInMainSub ? mainSubSpawnPoints[i] : (cloningSpawn ? clonningSpawnPoints[i] : shuttleSpawnPoints[i])).WorldPosition, characterInfos[i].Name, isRemotePlayer: !bot, hasAi: bot);
                 character.TeamID = CharacterTeamType.Team1;
                 character.LoadTalents();
 
